@@ -10,7 +10,8 @@ setup(
     license='LICENSE.txt',
     description='Limit Order Book Matching Engine',
     install_requires=[
-        'sortedcontainers >= 2'
-        ],
-    scripts=['bin/algosim.py']
-    )
+        'sortedcontainers >= 2',
+        'six >= 1.17',
+    ],
+    scripts=['bin/algosim.py'],
+)
