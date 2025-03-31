@@ -1,3 +1,3 @@
-from .orderbook import OrderBook
+from .orderbook import OrderBook, OrderBookError
 
-__all__ = ['orderbook', 'ordertree', 'orderlist', 'order']
+__all__ = ["OrderBook", "OrderBookError"]
