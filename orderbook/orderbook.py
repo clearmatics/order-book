@@ -221,12 +221,12 @@ class OrderBook(object):
         if side == "bid":
             volume = 0
             if self.bids.price_exists(price):
-                volume = self.bids.get_price(price).volume
+                volume = self.bids.get_price_list(price).volume
             return volume
         elif side == "ask":
             volume = 0
             if self.asks.price_exists(price):
-                volume = self.asks.get_price(price).volume
+                volume = self.asks.get_price_list(price).volume
             return volume
         else:
             raise OrderBookError('get_volume_at_price() given neither "bid" nor "ask"')
