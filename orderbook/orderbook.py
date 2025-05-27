@@ -1,6 +1,5 @@
 # type: ignore
 
-from collections import deque  # a faster insert/pop queue
 from six.moves import cStringIO as StringIO
 from decimal import Decimal
 
@@ -12,36 +11,22 @@ class OrderBookError(Exception):
 
 
 class OrderBook(object):
-    def __init__(self, tick_size=0.0001):
-        self.tape = deque(maxlen=None)  # Index[0] is most recent trade
+    def __init__(self):
         self.bids = OrderTree()
         self.asks = OrderTree()
-        self.last_tick = None
-        self.last_timestamp = 0
-        self.tick_size = tick_size
         self.time = 0
-        self.next_order_id = 0
 
-    def update_time(self):
-        self.time += 1
-
-    def process_order(self, quote, from_data, verbose):
+    def process_order(self, quote, verbose):
         order_type = quote["type"]
         order_in_book = None
-        if from_data:
-            self.time = quote["timestamp"]
-        else:
-            self.update_time()
-            quote["timestamp"] = self.time
+        self.time = quote["timestamp"]
         if quote["quantity"] <= 0:
             raise OrderBookError("process_order() given order of quantity <= 0")
-        if not from_data:
-            self.next_order_id += 1
         if order_type == "market":
             trades = self.process_market_order(quote, verbose)
         elif order_type == "limit":
             quote["price"] = Decimal(quote["price"])
-            trades, order_in_book = self.process_limit_order(quote, from_data, verbose)
+            trades, order_in_book = self.process_limit_order(quote, verbose)
         else:
             raise OrderBookError("order_type for process_order() is neither 'market' or 'limit'")
         return trades, order_in_book
@@ -117,7 +102,6 @@ class OrderBook(object):
                 ]
                 transaction_record["party2"] = [quote["trade_id"], "bid", None, None]
 
-            self.tape.append(transaction_record)
             trades.append(transaction_record)
         return quantity_to_trade, trades
 
@@ -143,7 +127,7 @@ class OrderBook(object):
             raise OrderBookError('process_market_order() recieved neither "bid" nor "ask"')
         return trades
 
-    def process_limit_order(self, quote, from_data, verbose):
+    def process_limit_order(self, quote, verbose):
         order_in_book = None
         trades = []
         quantity_to_trade = quote["quantity"]
@@ -160,8 +144,6 @@ class OrderBook(object):
                 trades += new_trades
             # If volume remains, need to update the book with new quantity
             if quantity_to_trade > 0:
-                if not from_data:
-                    quote["order_id"] = self.next_order_id
                 quote["quantity"] = quantity_to_trade
                 self.bids.insert_order(quote)
                 order_in_book = quote
@@ -176,8 +158,6 @@ class OrderBook(object):
                 trades += new_trades
             # If volume remains, need to update the book with new quantity
             if quantity_to_trade > 0:
-                if not from_data:
-                    quote["order_id"] = self.next_order_id
                 quote["quantity"] = quantity_to_trade
                 self.asks.insert_order(quote)
                 order_in_book = quote
@@ -185,11 +165,7 @@ class OrderBook(object):
             raise OrderBookError('process_limit_order() given neither "bid" nor "ask"')
         return trades, order_in_book
 
-    def cancel_order(self, side, order_id, time=None):
-        if time:
-            self.time = time
-        else:
-            self.update_time()
+    def cancel_order(self, side, order_id):
         if side == "bid":
             if self.bids.order_exists(order_id):
                 self.bids.remove_order_by_id(order_id)
@@ -202,23 +178,6 @@ class OrderBook(object):
             return False
         else:
             raise OrderBookError('cancel_order() given neither "bid" nor "ask"')
-
-    def modify_order(self, order_id, order_update, time=None):
-        if time:
-            self.time = time
-        else:
-            self.update_time()
-        side = order_update["side"]
-        order_update["order_id"] = order_id
-        order_update["timestamp"] = self.time
-        if side == "bid":
-            if self.bids.order_exists(order_update["order_id"]):
-                self.bids.update_order(order_update)
-        elif side == "ask":
-            if self.asks.order_exists(order_update["order_id"]):
-                self.asks.update_order(order_update)
-        else:
-            raise OrderBookError('modify_order() given neither "bid" nor "ask"')
 
     def get_volume_at_price(self, side, price):
         price = Decimal(price)
@@ -247,46 +206,14 @@ class OrderBook(object):
     def get_worst_ask(self):
         return self.asks.max_price()
 
-    def tape_dump(self, filename, filemode, tapemode):
-        dumpfile = open(filename, filemode)
-        for tapeitem in self.tape:
-            dumpfile.write(
-                "Time: %s, Price: %s, Quantity: %s\n"
-                % (tapeitem["time"], tapeitem["price"], tapeitem["quantity"])
-            )
-        dumpfile.close()
-        if tapemode == "wipe":
-            self.tape = []
-
     def __str__(self):
         tempfile = StringIO()
         tempfile.write("***Bids***\n")
-        if self.bids != None and len(self.bids) > 0:
-            for key, value in reversed(self.bids.price_map.items()):
+        if self.bids is not None and len(self.bids) > 0:
+            for _, value in reversed(self.bids.price_map.items()):
                 tempfile.write("%s" % value)
         tempfile.write("\n***Asks***\n")
-        if self.asks != None and len(self.asks) > 0:
-            for key, value in self.asks.price_map.items():
+        if self.asks is not None and len(self.asks) > 0:
+            for _, value in self.asks.price_map.items():
                 tempfile.write("%s" % value)
-        tempfile.write("\n***Trades***\n")
-        if self.tape != None and len(self.tape) > 0:
-            num = 0
-            for entry in self.tape:
-                if num < 10:  # get last 5 entries
-                    tempfile.write(
-                        str(entry["quantity"])
-                        + " @ "
-                        + str(entry["price"])
-                        + " ("
-                        + str(entry["timestamp"])
-                        + ") "
-                        + str(entry["party1"][0])
-                        + "/"
-                        + str(entry["party2"][0])
-                        + "\n"
-                    )
-                    num += 1
-                else:
-                    break
-        tempfile.write("\n")
         return tempfile.getvalue()
