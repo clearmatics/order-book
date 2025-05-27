@@ -193,9 +193,13 @@ class OrderBook(object):
         if side == "bid":
             if self.bids.order_exists(order_id):
                 self.bids.remove_order_by_id(order_id)
+                return True
+            return False
         elif side == "ask":
             if self.asks.order_exists(order_id):
                 self.asks.remove_order_by_id(order_id)
+                return True
+            return False
         else:
             raise OrderBookError('cancel_order() given neither "bid" nor "ask"')
 
